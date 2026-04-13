@@ -939,6 +939,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("SMART TAG APP v1.1 - AI FIX LOADED");
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
