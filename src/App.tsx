@@ -63,7 +63,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, SchemaType } from "@google/genai";
 
 import { db, auth } from './firebase';
 
@@ -72,33 +72,46 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Lazy initialization for Gemini AI
+let aiInstance: GoogleGenAI | null = null;
+const getAI = () => {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI(key);
+  }
+  return aiInstance;
+};
 
 // --- AI Logic ---
 async function analyzeMessage(message: string, targetLang: string = "English") {
+  const ai = getAI();
+  if (!ai) return { isValid: true, cleanedMessage: message }; // Fallback if no AI key
+
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Analyze this message sent to a vehicle owner: "${message}". 
+    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: `Analyze this message sent to a vehicle owner: "${message}". 
       1. Check if it's spam, harassment, or invalid.
       2. If valid, summarize it into a clean, urgent notification tone.
       3. Translate the final message to ${targetLang} if it's in a different language.
-      4. If invalid, explain why.`,
-      config: {
+      4. If invalid, explain why.` }] }],
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
-            isValid: { type: Type.BOOLEAN },
-            cleanedMessage: { type: Type.STRING },
-            translation: { type: Type.STRING },
-            reason: { type: Type.STRING }
+            isValid: { type: SchemaType.BOOLEAN },
+            cleanedMessage: { type: SchemaType.STRING },
+            translation: { type: SchemaType.STRING },
+            reason: { type: SchemaType.STRING }
           },
           required: ["isValid", "cleanedMessage"]
         }
       }
     });
-    return JSON.parse(response.text);
+    const text = result.response.text();
+    return JSON.parse(text);
   } catch (error) {
     console.error("AI Analysis failed:", error);
     return { isValid: true, cleanedMessage: message }; // Fallback
@@ -106,27 +119,33 @@ async function analyzeMessage(message: string, targetLang: string = "English") {
 }
 
 async function analyzeDamage(imageData: string) {
+  const ai = getAI();
+  if (!ai) return { severity: "Unknown", report: "AI not configured." };
+
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent({
       contents: [
-        { text: "Analyze this image of vehicle damage. Provide a preliminary report including: 1. Estimated severity (Low/Medium/High), 2. Affected parts, 3. Suggested next steps for insurance." },
-        { inlineData: { data: imageData.split(',')[1], mimeType: "image/jpeg" } }
+        { role: 'user', parts: [
+          { text: "Analyze this image of vehicle damage. Provide a preliminary report including: 1. Estimated severity (Low/Medium/High), 2. Affected parts, 3. Suggested next steps for insurance." },
+          { inlineData: { data: imageData.split(',')[1], mimeType: "image/jpeg" } }
+        ]}
       ],
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
-            severity: { type: Type.STRING },
-            report: { type: Type.STRING },
-            parts: { type: Type.ARRAY, items: { type: Type.STRING } }
+            severity: { type: SchemaType.STRING },
+            report: { type: SchemaType.STRING },
+            parts: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
           },
           required: ["severity", "report"]
         }
       }
     });
-    return JSON.parse(response.text);
+    const text = result.response.text();
+    return JSON.parse(text);
   } catch (error) {
     console.error("Damage analysis failed:", error);
     return { severity: "Unknown", report: "Could not analyze image." };
