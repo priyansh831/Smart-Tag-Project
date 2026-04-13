@@ -63,7 +63,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { GoogleGenAI, SchemaType } from "@google/genai";
 
 import { db, auth } from './firebase';
 
@@ -73,20 +72,30 @@ function cn(...inputs: ClassValue[]) {
 }
 
 // Lazy initialization for Gemini AI
-let aiInstance: GoogleGenAI | null = null;
-const getAI = () => {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
-  if (!aiInstance) {
-    aiInstance = new GoogleGenAI(key);
+let aiInstance: any = null;
+let SchemaTypeInstance: any = null;
+
+const getAI = async () => {
+  try {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key || key === "" || key === "undefined" || key === "null") return null;
+    if (!aiInstance) {
+      const genAI: any = await import("@google/genai");
+      aiInstance = new genAI.GoogleGenAI(key);
+      SchemaTypeInstance = genAI.SchemaType;
+    }
+    return { ai: aiInstance, SchemaType: SchemaTypeInstance };
+  } catch (e) {
+    console.warn("Gemini AI initialization skipped:", e);
+    return null;
   }
-  return aiInstance;
 };
 
 // --- AI Logic ---
 async function analyzeMessage(message: string, targetLang: string = "English") {
-  const ai = getAI();
-  if (!ai) return { isValid: true, cleanedMessage: message }; // Fallback if no AI key
+  const aiData = await getAI();
+  if (!aiData) return { isValid: true, cleanedMessage: message }; // Fallback if no AI key
+  const { ai, SchemaType } = aiData;
 
   try {
     const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -119,8 +128,9 @@ async function analyzeMessage(message: string, targetLang: string = "English") {
 }
 
 async function analyzeDamage(imageData: string) {
-  const ai = getAI();
-  if (!ai) return { severity: "Unknown", report: "AI not configured." };
+  const aiData = await getAI();
+  if (!aiData) return { severity: "Unknown", report: "AI not configured." };
+  const { ai, SchemaType } = aiData;
 
   try {
     const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
