@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "Represents a vehicle registered by an owner.",
+      "type": "object",
+      "properties": {
+        "plateNumber": { "type": "string", "description": "The license plate number." },
+        "ownerUid": { "type": "string", "description": "The UID of the owner." },
+        "ownerEmail": { "type": "string", "description": "The email of the owner for notifications." },
+        "parkedMode": { "type": "boolean", "description": "Whether the vehicle is in high-security parked mode." },
+        "iceInfo": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "medicalInfo": { "type": "string" },
+            "emergencyContact": { "type": "string" }
+          }
+        },
+        "permitInfo": {
+          "type": "object",
+          "properties": {
+            "isValid": { "type": "boolean" },
+            "expiry": { "type": "string" },
+            "zone": { "type": "string" }
+          }
+        },
+        "serviceHistory": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": { "type": "string" },
+              "type": { "type": "string" },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "points": { "type": "integer", "description": "Owner's reward points." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the vehicle was registered." }
+      },
+      "required": ["plateNumber", "ownerUid", "ownerEmail", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message sent from a scanner to a vehicle owner.",
+      "type": "object",
+      "properties": {
+        "vehicleId": { "type": "string", "description": "The ID of the vehicle tag." },
+        "content": { "type": "string", "description": "The AI-cleaned message content." },
+        "originalContent": { "type": "string", "description": "The original message before AI cleaning." },
+        "type": { "type": "string", "enum": ["blocking", "lights", "window", "custom", "call_request", "damage", "ice_access"], "description": "The type of alert." },
+        "imageUrl": { "type": "string", "description": "Optional image for damage assessment." },
+        "damageAnalysis": { "type": "string", "description": "AI generated damage report." },
+        "translation": { "type": "string", "description": "AI translated content." },
+        "status": { "type": "string", "enum": ["sent", "delivered", "read"], "description": "Current status of the message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent." }
+      },
+      "required": ["vehicleId", "content", "type", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/vehicles/{vehicleId}": {
+      "schema": "Vehicle",
+      "description": "Collection of registered vehicles."
+    },
+    "/vehicles/{vehicleId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages sent to a specific vehicle."
+    }
+  }
+}

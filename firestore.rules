@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: vehicles
+    // Document ID: vehicleId
+    // Fields:
+    //   - plateNumber: string (required)
+    //   - ownerUid: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: vehicles/{vehicleId}/messages
+    // Document ID: messageId
+    // Fields:
+    //   - vehicleId: string (required)
+    //   - content: string (required)
+    //   - type: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidVehicle(data) {
+      return data.keys().hasAll(['plateNumber', 'ownerUid', 'ownerEmail', 'createdAt']) &&
+             data.plateNumber is string && data.plateNumber.size() > 0 &&
+             data.ownerUid is string &&
+             data.ownerEmail is string &&
+             data.createdAt is timestamp &&
+             (!('parkedMode' in data) || data.parkedMode is bool) &&
+             (!('points' in data) || data.points is int) &&
+             (!('iceInfo' in data) || data.iceInfo is map) &&
+             (!('permitInfo' in data) || data.permitInfo is map) &&
+             (!('serviceHistory' in data) || data.serviceHistory is list);
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['vehicleId', 'content', 'type', 'createdAt']) &&
+             data.vehicleId is string &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 5000 &&
+             data.type in ['blocking', 'lights', 'window', 'custom', 'call_request', 'damage', 'ice_access'] &&
+             data.createdAt is timestamp &&
+             (!('imageUrl' in data) || data.imageUrl is string) &&
+             (!('damageAnalysis' in data) || data.damageAnalysis is string) &&
+             (!('translation' in data) || data.translation is string);
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if true; // Scanner needs to check if vehicle exists
+      allow create: if isAuthenticated() && isValidVehicle(request.resource.data) && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerUid);
+
+      match /messages/{messageId} {
+        allow read: if isOwner(get(/databases/$(database)/documents/vehicles/$(vehicleId)).data.ownerUid);
+        allow create: if isValidMessage(request.resource.data);
+      }
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
